@@ -1,43 +1,32 @@
-// SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import "./interface/ERC165.sol";
 import "./interface/ERC721.sol";
-
-library Address {
-    function isContract(address _addr) public view returns (bool) {
-        uint32 size;
-        assembly {
-            size := extcodesize(_addr)
-        }
-        return (size > 0);
-    }
-}
+import "./interface/ERC165.sol";
+import "./library/Address.sol";
 
 contract BasicNFT {
     using Address for address;
 
-    string private constant _name = "Pixel";
-    string private constant _symbol = "PXL";
-    mapping(address => uint) private addressToBalance;
-    mapping(uint256 => address) private tokenIdToBalance;
     mapping(bytes4 => bool) private checkInterface;
-
-    bytes4 private constant ERC165_ID = 0x01ffc9a7;
-    bytes4 private constant ERC721_ID = 0x80ac58cd;
-    bytes4 private constant ERC721METADATA_ID = 0x5b5e139f;
-    bytes4 private constant ERC721ENUMERABLE_ID = 0x780e9d63;
+    mapping(address => uint256) private addressToBalance;
+    mapping(address => uint256[]) private addressToAssets;
+    mapping(uint256 => address) private tokenIdToAddress;
+    mapping(uint256 => address[]) private permission;
+    mapping(address => mapping(address => bool)) private permissionAll;
 
     event Transfer(
         address indexed _from,
         address indexed _to,
         uint256 indexed _tokenId
     );
+
     event Approval(
         address indexed _owner,
         address indexed _approved,
         uint256 indexed _tokenId
     );
+
     event ApprovalForAll(
         address indexed _owner,
         address indexed _operator,
@@ -45,18 +34,8 @@ contract BasicNFT {
     );
 
     constructor() {
-        checkInterface[ERC165_ID] = true;
-        checkInterface[ERC721_ID] = true;
-        checkInterface[ERC721METADATA_ID] = true;
-        checkInterface[ERC721ENUMERABLE_ID] = true;
-    }
-
-    function balanceOf(address _owner) external view returns (uint256) {
-        return addressToBalance[_owner];
-    }
-
-    function ownerOf(uint256 _tokenId) public view returns (address) {
-        return tokenIdToBalance[_tokenId];
+        checkInterface[0x80ac58cd] = true; //ERC 721
+        checkInterface[0x01ffc9a7] = true; //ERC 165
     }
 
     function safeTransferFrom(
@@ -67,19 +46,25 @@ contract BasicNFT {
     ) external payable {
         transferFrom(_from, _to, _tokenId);
 
-        if (_from.isContract()) {
-            bytes4 signature = bytes4(
-                keccak256(
-                    "onERC721Received(address,address,uint256,bytes)returns(bytes4)"
+        bytes4 functionSelector = bytes4(
+            keccak256("onERC721Received(address,address,uint256,bytes)")
+        );
+        if (_to.isContract()) {
+            (bool success, bytes memory returnData) = _to.call(
+                abi.encodeWithSelector(
+                    functionSelector,
+                    _from,
+                    _to,
+                    _tokenId,
+                    data
                 )
             );
 
-            (bool success, bytes memory returnData) = _from.call(
-                abi.encodeWithSelector(signature, _from, _to, _tokenId, data)
-            );
+            require(success, "call function is not succesful");
+
             require(
-                success && returnData.length == 0,
-                "ERC721: transfer to non ERC721Receiver implementer"
+                bytes4(returnData) == functionSelector,
+                "Expected Return Value Invalid"
             );
         }
     }
@@ -90,6 +75,30 @@ contract BasicNFT {
         uint256 _tokenId
     ) external payable {
         transferFrom(_from, _to, _tokenId);
+
+        bytes memory data = abi.encode("");
+
+        bytes4 functionSelector = bytes4(
+            keccak256("onERC721Received(address,address,uint256,bytes)")
+        );
+        if (_to.isContract()) {
+            (bool success, bytes memory returnData) = _to.call(
+                abi.encodeWithSelector(
+                    functionSelector,
+                    _from,
+                    _to,
+                    _tokenId,
+                    data
+                )
+            );
+
+            require(success, "call function is not succesful");
+
+            require(
+                bytes4(returnData) == functionSelector,
+                "Expected Return Value Invalid"
+            );
+        }
     }
 
     function transferFrom(
@@ -97,54 +106,78 @@ contract BasicNFT {
         address _to,
         uint256 _tokenId
     ) public payable {
-        if (
-            msg.sender != ownerOf(_tokenId) ||
-            msg.sender == getApproved(_tokenId)
-        ) {
-            if (ownerOf(_tokenId) == _from) {
-                tokenIdToBalance[_tokenId] = _to;
-                emit Transfer(_from, _to, _tokenId);
-            } else {
-                revert("ERC721: transfer of token that is not own");
-            }
-        } else {
-            revert("Transfer: Permission Denied");
-        }
+        //Throws unless `msg.sender` is the current owner, an authorized, operator, or the approved address for this NFT. Throws if `_from` is not the current owner.
+        require(
+            msg.sender == ownerOf(_tokenId) ||
+                isApprovedForAll(_from, msg.sender) ||
+                msg.sender == getApproved(_tokenId),
+            "Permission Denied"
+        );
+        // Throws if `_to` is the zero address.
+        require(_to != address(0), "Invalid Recipient Address");
+        // Throws if _tokenId` is not a valid NFT.
+        require(ownerOf(_tokenId) != address(0), "Invalid Token Id");
+
+        tokenIdToAddress[_tokenId] = _to;
+        emit Transfer(_from, _to, _tokenId);
     }
 
-    function approve(address _approved, uint256 _tokenId) external payable {}
+    function balanceOf(address _owner) public view returns (uint256) {
+        require(
+            addressToBalance[_owner] != 0,
+            "Invalid Address: Balance Is Zero."
+        );
+        return addressToBalance[_owner];
+    }
 
-    function setApprovalForAll(address _operator, bool _approved) external {}
-
-    function getApproved(uint256 _tokenId) public view returns (address) {}
+    function ownerOf(uint256 _tokenId) public view returns (address) {
+        require(
+            tokenIdToAddress[_tokenId] != address(0),
+            "Invalid Token ID: No Owner Found."
+        );
+        return (tokenIdToAddress[_tokenId]);
+    }
 
     function isApprovedForAll(
         address _owner,
         address _operator
-    ) external view returns (bool) {}
+    ) public view returns (bool) {
+        return permissionAll[_operator][_owner];
+    }
+
+    function getApproved(uint256 _tokenId) public view returns (address) {
+        if (permission[_tokenId].length > 1) {
+            revert("Multiple Operators Found.");
+        } else {
+            return permission[_tokenId][0];
+        }
+    }
+
+    function setApprovalForAll(address _operator, bool _approved) external {
+        if (_approved) {
+            for (uint i = 0; i < addressToAssets[msg.sender].length; i++) {
+                approve(_operator, addressToAssets[msg.sender][i]);
+            }
+            permissionAll[_operator][msg.sender] = _approved;
+            emit ApprovalForAll(msg.sender, _operator, _approved);
+        } else {
+            permissionAll[_operator][msg.sender] = _approved;
+            emit ApprovalForAll(msg.sender, _operator, _approved);
+        }
+    }
+
+    function approve(address _approved, uint256 _tokenId) public payable {
+        if (msg.sender == ownerOf(_tokenId)) {
+            permission[_tokenId].push(_approved);
+            emit Approval(msg.sender, _approved, _tokenId);
+        } else {
+            revert("Permission Denied.");
+        }
+    }
 
     function supportsInterface(
         bytes4 interfaceID
     ) external view returns (bool) {
         return checkInterface[interfaceID];
     }
-
-    function name() external pure returns (string memory) {
-        return _name;
-    }
-
-    function symbol() external pure returns (string memory) {
-        return _symbol;
-    }
-
-    function tokenURI(uint256 _tokenId) external view returns (string memory) {}
-
-    function totalSupply() external view returns (uint256) {}
-
-    function tokenByIndex(uint256 _index) external view returns (uint256) {}
-
-    function tokenOfOwnerByIndex(
-        address _owner,
-        uint256 _index
-    ) external view returns (uint256) {}
 }
