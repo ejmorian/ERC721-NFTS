@@ -7,7 +7,7 @@ contract Akari is ERC721 {
     uint256 private s_tokenCounter;
 
     string private _tokenURI =
-        "https://gateway.pinata.cloud/ipfs/QmU6Q9Q5bPD4KK7Th2XoCATPV9vr3F2uBEhDRVSSq3FGD8?_gl=1*z5syvj*rs_ga*ZGYwYWM2ZjYtYzgyNC00ZDBiLTk4ZjQtNjNhNTFiNzMxYWVl*rs_ga_5RMPXG14TE*MTY4MjUxODk3NS4xLjEuMTY4MjUxOTkxNi42MC4wLjA.";
+        "ipfs://QmaqwNyKmCRR3CdhMpu3yuzzLtVXRj5ctz698gjKb1MuTm";
 
     constructor(
         string memory _name,

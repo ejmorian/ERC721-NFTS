@@ -14,12 +14,13 @@ const main = async () => {
     await akariContract.deployTransaction.wait(6)
     console.log("contract deployed to:", akariContract.address);
 
+    await akariContract.mintAkari();
+
     if(network.name == "polygon_mumbai"){
       await verify(akariContract.address, ["Akari", "AKA"]);
     }else{
       console.log("not in polygon network...")
     }
-
 }
 
 main().then(() => process.exit(1)).catch((e) =>{
