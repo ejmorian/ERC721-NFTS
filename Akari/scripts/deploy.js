@@ -16,7 +16,7 @@ const main = async () => {
 
     await akariContract.mintAkari();
 
-    if(network.name == "polygon_mumbai"){
+    if(network.name == "zkevm_testnet"){
       await verify(akariContract.address, ["Akari", "AKA"]);
     }else{
       console.log("not in polygon network...")
