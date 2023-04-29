@@ -28,7 +28,8 @@ module.exports = {
     }
   },
   etherscan: {
-    apiKey: {sepolia : ETHERSCAN_API_KEY,}
+    apiKey: {sepolia : ETHERSCAN_API_KEY,
+      polygonMumbai: POLYGONSCAN_API_KEY}
   },
   mocha: {
     setTimeout: 100000,
